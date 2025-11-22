@@ -22,6 +22,11 @@ YouTube Analysis Agent는 Gemini API와 Claude API를 활용하여 YouTube 영�
 ### 3. 커스텀 분석
 - 사용자 정의 프롬프트로 맞춤형 분석 가능
 
+### 4. MCP 서버 (NEW!)
+- **Claude Desktop/Code 통합**: 대화 중 바로 YouTube 분석
+- **자연스러운 대화**: CLI 실행 없이 Claude와 대화로 분석
+- **실시간 분석**: "이 영상 분석해줘" → 즉시 결과 반환
+
 ## 설치
 
 ```bash
@@ -51,6 +56,27 @@ ANTHROPIC_API_KEY=your_anthropic_api_key_here
 - **Anthropic API**: [Anthropic Console](https://console.anthropic.com/)
 
 ## 사용법
+
+### MCP 서버로 사용 (추천!)
+
+Claude Desktop이나 Claude Code에서 대화하면서 바로 YouTube 분석을 실행할 수 있습니다.
+
+**설정 방법:**
+```bash
+cd mcp-server
+pip install -r requirements.txt
+```
+
+자세한 설정 방법은 [MCP 서버 문서](mcp-server/README.md)를 참조하세요.
+
+**사용 예시:**
+```
+User: 이 YouTube 영상 분석해줘
+      https://www.youtube.com/watch?v=VIDEO_ID
+
+Claude: (자동으로 analyze_youtube_video 도구 사용)
+        분석 결과를 대화로 설명...
+```
 
 ### CLI 인터페이스
 
@@ -132,8 +158,13 @@ youtube-analysis-agent/
 │   ├── agent.py              # 메인 에이전트
 │   ├── youtube_extractor.py  # YouTube 콘텐츠 추출
 │   └── content_analyzer.py   # Claude 기반 분석
+├── mcp-server/               # MCP 서버 (Claude Desktop/Code 통합)
+│   ├── server.py             # MCP 서버 메인
+│   ├── requirements.txt      # MCP 의존성
+│   └── README.md             # MCP 서버 문서
 ├── config/
 │   └── settings.py           # 설정 관리
+├── examples/                 # 사용 예제
 ├── tests/                    # 테스트
 ├── output/                   # 분석 결과 저장
 ├── main.py                   # CLI 인터페이스
