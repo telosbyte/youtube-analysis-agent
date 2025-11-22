@@ -9,6 +9,7 @@ from datetime import datetime
 
 from .youtube_extractor import YouTubeExtractor
 from .content_analyzer import ContentAnalyzer
+from .prompt_manager import PromptManager
 
 logger = logging.getLogger(__name__)
 
@@ -36,26 +37,29 @@ class YouTubeAnalysisAgent:
         """
         self.extractor = YouTubeExtractor(gemini_api_key, gemini_model)
         self.analyzer = ContentAnalyzer(anthropic_api_key, claude_model)
+        self.prompt_manager = PromptManager()
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
-        logger.info("Initialized YouTubeAnalysisAgent")
+        logger.info("Initialized YouTubeAnalysisAgent with PromptManager")
 
     def analyze_video(
         self,
         video_url: str,
         analysis_type: str = "comprehensive",
         use_gemini_extraction: bool = True,
-        save_results: bool = True
+        save_results: bool = True,
+        category_override: Optional[str] = None
     ) -> Optional[Dict[str, Any]]:
         """
-        Analyze YouTube video
+        Analyze YouTube video with category-specific prompts
 
         Args:
             video_url: YouTube video URL
-            analysis_type: Type of analysis (comprehensive, sentiment, summary, key_points, crypto)
+            analysis_type: Type of analysis (comprehensive, sentiment, summary, key_points)
             use_gemini_extraction: Use Gemini for extraction (True) or transcript API (False)
             save_results: Save results to file
+            category_override: Override auto-detected category (optional)
 
         Returns:
             Complete analysis results
@@ -63,30 +67,55 @@ class YouTubeAnalysisAgent:
         logger.info(f"Starting analysis for video: {video_url}")
         logger.info(f"Analysis type: {analysis_type}")
 
-        # Step 1: Extract content
-        logger.info("Step 1: Extracting content...")
-        extracted_content = self.extractor.extract_content(video_url, use_gemini=use_gemini_extraction)
+        # Step 1: Extract content AND classify category (Gemini)
+        logger.info("Step 1: Extracting content and classifying category...")
+        extracted_content = self.extractor.extract_content(
+            video_url,
+            use_gemini=use_gemini_extraction,
+            classify=True  # Enable classification
+        )
 
         if not extracted_content:
             logger.error("Failed to extract content")
             return None
 
-        # Step 2: Analyze with Claude
-        logger.info("Step 2: Analyzing with Claude...")
+        # Get category (from Gemini or override)
+        detected_category = extracted_content.get('category', 'general')
+        category = category_override if category_override else detected_category
+        confidence = extracted_content.get('confidence', 0)
+
+        logger.info(f"Video category: {category} (confidence: {confidence}%)")
+
+        # Step 2: Get category-specific prompt
+        logger.info(f"Step 2: Selecting prompt for category '{category}' and type '{analysis_type}'...")
 
         # Prepare content for analysis
-        if extracted_content['method'] == 'gemini_multimodal':
-            content_to_analyze = extracted_content['gemini_analysis']
-        else:
-            content_to_analyze = extracted_content['transcript']
+        content_to_analyze = extracted_content.get('transcript', '')
 
-        analysis_result = self.analyzer.analyze_transcript(content_to_analyze, analysis_type)
+        # Get the appropriate prompt from PromptManager
+        analysis_prompt = self.prompt_manager.get_prompt(
+            category=category,
+            analysis_type=analysis_type,
+            content=content_to_analyze
+        )
+
+        # Step 3: Analyze with Claude using category-specific prompt
+        logger.info("Step 3: Analyzing with Claude using category-specific prompt...")
+        analysis_result = self.analyzer.analyze_with_custom_prompt(
+            content=content_to_analyze,
+            custom_prompt=analysis_prompt
+        )
 
         if not analysis_result:
             logger.error("Failed to analyze content")
             return None
 
-        # Step 3: Combine results
+        # Add category info to analysis result
+        analysis_result['category'] = category
+        analysis_result['category_confidence'] = confidence
+        analysis_result['analysis_type'] = analysis_type
+
+        # Step 4: Combine results
         complete_result = {
             'video_url': video_url,
             'timestamp': datetime.now().isoformat(),
@@ -94,11 +123,11 @@ class YouTubeAnalysisAgent:
             'analysis': analysis_result
         }
 
-        # Step 4: Save results
+        # Step 5: Save results
         if save_results:
             self._save_results(complete_result, video_url)
 
-        logger.info("Analysis completed successfully")
+        logger.info(f"Analysis completed successfully (category: {category})")
         return complete_result
 
     def analyze_with_custom_prompt(
@@ -198,8 +227,14 @@ class YouTubeAnalysisAgent:
         report.append("=" * 80)
         report.append(f"\nVideo URL: {results['video_url']}")
         report.append(f"Analysis Time: {results['timestamp']}")
-        report.append(f"\nExtraction Method: {results['extraction']['method']}")
-        report.append(f"Analysis Type: {results['analysis']['analysis_type']}")
+
+        # Category information
+        category = results['analysis'].get('category', 'N/A')
+        confidence = results['analysis'].get('category_confidence', 0)
+        report.append(f"\nCategory: {category} (confidence: {confidence}%)")
+
+        report.append(f"Extraction Method: {results['extraction']['method']}")
+        report.append(f"Analysis Type: {results['analysis'].get('analysis_type', 'N/A')}")
         report.append(f"\nModel Used: {results['analysis']['model']}")
         report.append(f"Tokens Used: {results['analysis']['usage']['input_tokens']} + {results['analysis']['usage']['output_tokens']}")
         report.append("\n" + "-" * 80)
