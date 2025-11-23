@@ -61,7 +61,32 @@ python main.py analyze "VIDEO_URL" --type crypto
 python main.py custom "VIDEO_URL" --prompt "이 영상의 핵심 메시지를 3가지로 정리해주세요."
 ```
 
-## 5. 결과 확인
+## 5. Claude Code 연동 (선택)
+
+프로젝트 루트에 `.mcp.json` 파일이 있어 Claude Code에서 "CLI에서 열기" 버튼이 활성화됩니다.
+
+### 5.1. 환경 변수 설정
+
+```bash
+# .env 파일 생성 (아직 안 했다면)
+cp .env.example .env
+
+# .env 파일 편집하여 실제 API 키 입력
+```
+
+### 5.2. Claude Code에서 사용
+
+1. **Claude Code 웹에서 프로젝트 열기**
+2. **"CLI에서 열기" 버튼 클릭** (이제 활성화됨!)
+3. **대화로 YouTube 분석:**
+   ```
+   이 YouTube 영상 분석해줘:
+   https://www.youtube.com/watch?v=VIDEO_ID
+   ```
+
+Claude가 자동으로 `analyze_youtube_video` 도구를 사용하여 분석합니다.
+
+## 6. 결과 확인
 
 분석 결과는 `output/` 디렉토리에 JSON 파일로 저장됩니다.
 
