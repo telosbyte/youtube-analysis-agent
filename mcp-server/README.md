@@ -11,39 +11,34 @@ Claude Desktop과 Claude Code에서 YouTube 영상을 분석할 수 있는 MCP(M
 
 ## 제공 도구
 
-### 1. `analyze_youtube_video`
-YouTube 영상을 분석합니다.
+### 1. `extract_youtube_content`
+YouTube 영상의 스크립트를 추출하고 카테고리를 자동 분류합니다.
+
+**중요:** 이 도구는 스크립트만 추출합니다. 분석은 Claude가 직접 수행합니다!
 
 **파라미터:**
 - `video_url` (필수): YouTube 영상 URL
-- `analysis_type` (선택): 분석 유형
-  - `comprehensive`: 종합 분석 (기본값)
-  - `sentiment`: 감성 분석
-  - `summary`: 요약
-  - `key_points`: 핵심 포인트
-  - `crypto`: 암호화폐 분석
-- `use_gemini` (선택): Gemini API 사용 여부 (기본: true)
+- `classify` (선택): 카테고리 자동 분류 여부 (기본: true)
+
+**카테고리:**
+- `crypto`: 암호화폐/블록체인
+- `finance`: 금융/투자
+- `tech`: 기술/IT
+- `news`: 뉴스/시사
+- `business`: 비즈니스/창업
+- `education`: 교육/강의
+- `general`: 일반
 
 **예시:**
 ```
-"이 YouTube 영상을 분석해줘: https://www.youtube.com/watch?v=VIDEO_ID"
+"이 YouTube 영상 분석해줘: https://www.youtube.com/watch?v=VIDEO_ID"
+
+→ 도구가 스크립트 + 카테고리를 반환
+→ Claude가 카테고리에 맞춰 분석
 ```
 
-### 2. `analyze_youtube_custom`
-커스텀 프롬프트로 YouTube 영상을 분석합니다.
-
-**파라미터:**
-- `video_url` (필수): YouTube 영상 URL
-- `custom_prompt` (필수): 커스텀 분석 프롬프트
-- `use_gemini` (선택): Gemini API 사용 여부
-
-**예시:**
-```
-"이 YouTube 영상에서 투자 전략만 정리해줘: https://www.youtube.com/watch?v=VIDEO_ID"
-```
-
-### 3. `get_youtube_transcript`
-YouTube 영상의 자막만 추출합니다.
+### 2. `get_youtube_transcript`
+YouTube 영상의 자막만 빠르게 추출합니다. (카테고리 분류 없음)
 
 **파라미터:**
 - `video_url` (필수): YouTube 영상 URL
@@ -65,15 +60,17 @@ pip install -r requirements.txt
 
 ### 2. 환경 변수 설정
 
+**중요:** MCP 서버는 GEMINI_API_KEY만 필요합니다!
+(Claude Code가 이미 Claude이므로 ANTHROPIC_API_KEY 불필요)
+
 ```bash
 cp .env.example .env
-# .env 파일에 API 키 입력
+# .env 파일에 Gemini API 키만 입력
 ```
 
 `.env` 파일:
 ```env
 GEMINI_API_KEY=your_gemini_api_key
-ANTHROPIC_API_KEY=your_anthropic_api_key
 ```
 
 ### 3. MCP 서버 테스트
@@ -95,8 +92,7 @@ python server.py
       "command": "python",
       "args": ["/home/user/youtube-analysis-agent/mcp-server/server.py"],
       "env": {
-        "GEMINI_API_KEY": "your_gemini_api_key",
-        "ANTHROPIC_API_KEY": "your_anthropic_api_key"
+        "GEMINI_API_KEY": "your_gemini_api_key"
       }
     }
   }
@@ -114,8 +110,7 @@ python server.py
       "command": "python",
       "args": ["C:\\path\\to\\youtube-analysis-agent\\mcp-server\\server.py"],
       "env": {
-        "GEMINI_API_KEY": "your_gemini_api_key",
-        "ANTHROPIC_API_KEY": "your_anthropic_api_key"
+        "GEMINI_API_KEY": "your_gemini_api_key"
       }
     }
   }
@@ -135,23 +130,30 @@ https://www.youtube.com/watch?v=dQw4w9WgXcQ
 
 ## Claude Code 연동
 
-### 설정 파일 경로
+### 설정 파일
 
-`.claude/settings.json` 또는 프로젝트 루트의 `.mcp.json`:
+프로젝트 루트의 `.mcp.json` (이미 포함됨!):
 
 ```json
 {
   "mcpServers": {
     "youtube-analysis": {
       "command": "python",
-      "args": ["/home/user/youtube-analysis-agent/mcp-server/server.py"],
+      "args": ["mcp-server/server.py"],
       "env": {
-        "GEMINI_API_KEY": "your_gemini_api_key",
-        "ANTHROPIC_API_KEY": "your_anthropic_api_key"
+        "GEMINI_API_KEY": "${GEMINI_API_KEY}"
       }
     }
   }
 }
+```
+
+**필수:** `.env` 파일에 GEMINI_API_KEY 설정
+
+```bash
+# 프로젝트 루트에서
+cp .env.example .env
+# .env 파일 편집하여 GEMINI_API_KEY 입력
 ```
 
 ### 사용 방법
@@ -159,50 +161,64 @@ https://www.youtube.com/watch?v=dQw4w9WgXcQ
 Claude Code에서 대화 중:
 
 ```
-이 YouTube 영상 요약해줘:
+이 YouTube 영상 분석해줘:
 https://www.youtube.com/watch?v=VIDEO_ID
 
-핵심 포인트 3가지만 추려서 알려줘.
+암호화폐 투자 관점에서 핵심 포인트 3가지만 알려줘.
 ```
+
+→ `extract_youtube_content` 도구가 스크립트 + 카테고리 반환
+→ Claude가 카테고리에 맞춰 자동 분석
 
 ## 사용 예시
 
-### 예시 1: 종합 분석
+### 예시 1: 자동 카테고리 분석
 
 ```
 User: 이 암호화폐 뉴스 영상 분석해줘
       https://www.youtube.com/watch?v=CRYPTO_NEWS_ID
 
-Claude: (analyze_youtube_video 도구 사용)
+Claude: (extract_youtube_content 도구 사용)
+        → 스크립트 + 카테고리(crypto) 추출
+        → Claude가 암호화폐 관점에서 분석
 
-        분석 결과:
-        - 핵심 주제: 비트코인 ETF 승인 관련 뉴스
-        - 주요 내용: ...
-        - 시장 전망: 상승세 예상
-        ...
+        📊 분석 결과:
+        **카테고리:** crypto
+
+        **언급된 암호화폐:**
+        - 비트코인 ETF 승인 관련
+
+        **시장 전망:**
+        - 상승세 예상...
+
+        **투자 리스크:**
+        - 규제 불확실성...
 ```
 
-### 예시 2: 커스텀 분석
+### 예시 2: 커스텀 질문
 
 ```
 User: 이 영상에서 투자 리스크만 정리해줘
       https://www.youtube.com/watch?v=VIDEO_ID
 
-Claude: (analyze_youtube_custom 도구 사용)
+Claude: (extract_youtube_content 도구 사용)
+        → 스크립트 추출
+        → Claude가 리스크 중심으로 분석
 
-        투자 리스크 분석:
+        🚨 투자 리스크:
         1. 시장 변동성 높음
         2. 규제 불확실성
         3. ...
 ```
 
-### 예시 3: 자막 추출
+### 예시 3: 자막만 추출
 
 ```
 User: 이 영상 자막 텍스트만 가져와줘
       https://www.youtube.com/watch?v=VIDEO_ID
 
 Claude: (get_youtube_transcript 도구 사용)
+        → 자막만 빠르게 추출
 
         자막 내용:
         안녕하세요. 오늘은 암호화폐 시장에 대해...
@@ -211,21 +227,29 @@ Claude: (get_youtube_transcript 도구 사용)
 
 ## 장점
 
-### 기존 CLI 방식
+### 기존 CLI 방식 (별도 분석)
 ```bash
 python main.py analyze "URL" --type crypto
-# 결과 확인
+# → Claude API 별도 호출 (ANTHROPIC_API_KEY 필요)
+# → 결과 파일로 저장
 cat output/result.json
 ```
 
-### MCP 서버 방식
+### MCP 서버 방식 (Claude Code 통합)
 ```
 "이 암호화폐 영상 분석해줘: URL"
-→ Claude가 자동으로 분석하고 대화로 설명
+→ 스크립트 추출 (Gemini)
+→ Claude Code가 직접 분석 (ANTHROPIC_API_KEY 불필요!)
+→ 대화로 바로 설명
 → 추가 질문 가능
+
 "투자하기 좋을까?"
-→ Claude가 분석 결과 기반으로 답변
+→ Claude가 분석 결과 기반으로 즉시 답변
 ```
+
+**핵심 차이점:**
+- CLI: Claude API 2번 호출 (Gemini + Anthropic)
+- MCP: Claude API 1번만 (Gemini만, Claude Code가 이미 Claude)
 
 ## 문제 해결
 

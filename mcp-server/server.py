@@ -20,7 +20,7 @@ from mcp.server.stdio import stdio_server
 from mcp.types import Tool, TextContent
 
 from dotenv import load_dotenv
-from src.agent import YouTubeAnalysisAgent
+from src.youtube_extractor import YouTubeExtractor
 
 # Load environment variables
 load_dotenv()
@@ -36,19 +36,16 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Initialize agent
+# Initialize YouTube extractor (only needs GEMINI_API_KEY)
 try:
-    agent = YouTubeAnalysisAgent(
+    extractor = YouTubeExtractor(
         gemini_api_key=os.getenv("GEMINI_API_KEY"),
-        anthropic_api_key=os.getenv("ANTHROPIC_API_KEY"),
-        gemini_model=os.getenv("GEMINI_MODEL", "gemini-1.5-pro"),
-        claude_model=os.getenv("CLAUDE_MODEL", "claude-sonnet-4-5-20250929"),
-        output_dir=Path(os.getenv("OUTPUT_DIR", "./output"))
+        gemini_model=os.getenv("GEMINI_MODEL", "gemini-1.5-pro")
     )
-    logger.info("YouTube Analysis Agent initialized successfully")
+    logger.info("YouTube Extractor initialized successfully")
 except Exception as e:
-    logger.error(f"Failed to initialize agent: {str(e)}")
-    agent = None
+    logger.error(f"Failed to initialize extractor: {str(e)}")
+    extractor = None
 
 # Create MCP server
 app = Server("youtube-analysis")
@@ -59,11 +56,12 @@ async def list_tools() -> list[Tool]:
     """List available tools"""
     return [
         Tool(
-            name="analyze_youtube_video",
+            name="extract_youtube_content",
             description=(
-                "YouTube 영상을 분석합니다. URL을 제공하면 자막을 추출하고 AI로 분석합니다. "
-                "analysis_type: comprehensive(종합), sentiment(감성), summary(요약), "
-                "key_points(핵심포인트), crypto(암호화폐)"
+                "YouTube 영상의 스크립트를 추출하고 카테고리를 자동 분류합니다. "
+                "분석은 Claude가 직접 수행합니다. "
+                "카테고리: crypto(암호화폐), finance(금융), tech(기술), news(뉴스), "
+                "business(비즈니스), education(교육), general(일반)"
             ),
             inputSchema={
                 "type": "object",
@@ -72,15 +70,9 @@ async def list_tools() -> list[Tool]:
                         "type": "string",
                         "description": "YouTube 영상 URL (예: https://www.youtube.com/watch?v=VIDEO_ID)"
                     },
-                    "analysis_type": {
-                        "type": "string",
-                        "enum": ["comprehensive", "sentiment", "summary", "key_points", "crypto"],
-                        "description": "분석 유형",
-                        "default": "comprehensive"
-                    },
-                    "use_gemini": {
+                    "classify": {
                         "type": "boolean",
-                        "description": "Gemini API 사용 여부 (true: Gemini, false: Transcript API)",
+                        "description": "카테고리 자동 분류 여부",
                         "default": True
                     }
                 },
@@ -88,35 +80,9 @@ async def list_tools() -> list[Tool]:
             }
         ),
         Tool(
-            name="analyze_youtube_custom",
-            description=(
-                "YouTube 영상을 커스텀 프롬프트로 분석합니다. "
-                "URL과 원하는 분석 방식을 자유롭게 지정할 수 있습니다."
-            ),
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "video_url": {
-                        "type": "string",
-                        "description": "YouTube 영상 URL"
-                    },
-                    "custom_prompt": {
-                        "type": "string",
-                        "description": "커스텀 분석 프롬프트 (예: '이 영상의 핵심 메시지를 3가지로 정리해주세요')"
-                    },
-                    "use_gemini": {
-                        "type": "boolean",
-                        "description": "Gemini API 사용 여부",
-                        "default": True
-                    }
-                },
-                "required": ["video_url", "custom_prompt"]
-            }
-        ),
-        Tool(
             name="get_youtube_transcript",
             description=(
-                "YouTube 영상의 자막만 추출합니다. 분석 없이 텍스트만 필요한 경우 사용하세요."
+                "YouTube 영상의 자막만 빠르게 추출합니다. 카테고리 분류가 필요 없는 경우 사용하세요."
             ),
             inputSchema={
                 "type": "object",
@@ -141,68 +107,73 @@ async def list_tools() -> list[Tool]:
 async def call_tool(name: str, arguments: Any) -> Sequence[TextContent]:
     """Handle tool calls"""
 
-    if agent is None:
+    if extractor is None:
         return [TextContent(
             type="text",
-            text="Error: YouTube Analysis Agent not initialized. Please check your API keys."
+            text="Error: YouTube Extractor not initialized. Please check your GEMINI_API_KEY."
         )]
 
     try:
-        if name == "analyze_youtube_video":
+        if name == "extract_youtube_content":
             video_url = arguments.get("video_url")
-            analysis_type = arguments.get("analysis_type", "comprehensive")
-            use_gemini = arguments.get("use_gemini", True)
+            classify = arguments.get("classify", True)
 
-            logger.info(f"Analyzing video: {video_url} (type: {analysis_type})")
+            logger.info(f"Extracting content from video: {video_url} (classify: {classify})")
 
-            # Perform analysis
-            results = agent.analyze_video(
-                video_url=video_url,
-                analysis_type=analysis_type,
-                use_gemini_extraction=use_gemini,
-                save_results=True
-            )
+            # Extract content with optional classification
+            result = extractor.extract_with_gemini(video_url, classify=classify)
 
-            if not results:
+            if not result:
                 return [TextContent(
                     type="text",
-                    text="Error: Failed to analyze video. Please check the URL and try again."
+                    text="Error: Failed to extract content. Please check the URL and try again."
                 )]
 
-            # Generate report
-            report = agent.get_summary_report(results)
+            # Format output for Claude to analyze
+            if classify and "category" in result:
+                output = f"""# YouTube 영상 콘텐츠
+
+**영상 URL:** {video_url}
+**카테고리:** {result['category']} (신뢰도: {result.get('confidence', 'N/A')}%)
+**길이:** {len(result['content'])} characters
+
+---
+
+## 스크립트
+
+{result['content']}
+
+---
+
+💡 **분석 가이드:**
+이 영상은 **{result['category']}** 카테고리로 분류되었습니다.
+다음 관점에서 분석해주세요:
+"""
+                # Add category-specific analysis suggestions
+                category_guides = {
+                    "crypto": "- 언급된 암호화폐/토큰\n- 시장 전망 및 근거\n- 투자 리스크 요인\n- 기술적/펀더멘털 분석",
+                    "finance": "- 투자 전략 및 포트폴리오\n- 시장 분석 및 전망\n- 리스크 관리 방법",
+                    "tech": "- 기술 스택 및 개념\n- 실용성 및 적용 방법\n- 학습 난이도",
+                    "news": "- 핵심 이슈 및 배경\n- 파급 효과\n- 객관성 평가",
+                    "business": "- 비즈니스 모델\n- 전략 및 실행 방법",
+                    "education": "- 학습 목표 및 핵심 개념\n- 난이도 및 전제 지식",
+                    "general": "- 핵심 메시지\n- 주요 인사이트"
+                }
+                output += category_guides.get(result['category'], "- 핵심 내용 요약\n- 주요 메시지")
+            else:
+                output = f"""# YouTube 영상 스크립트
+
+**영상 URL:** {video_url}
+**길이:** {len(result['content'])} characters
+
+---
+
+{result['content']}
+"""
 
             return [TextContent(
                 type="text",
-                text=report
-            )]
-
-        elif name == "analyze_youtube_custom":
-            video_url = arguments.get("video_url")
-            custom_prompt = arguments.get("custom_prompt")
-            use_gemini = arguments.get("use_gemini", True)
-
-            logger.info(f"Custom analysis for video: {video_url}")
-
-            # Perform custom analysis
-            results = agent.analyze_with_custom_prompt(
-                video_url=video_url,
-                custom_prompt=custom_prompt,
-                use_gemini_extraction=use_gemini,
-                save_results=True
-            )
-
-            if not results:
-                return [TextContent(
-                    type="text",
-                    text="Error: Failed to analyze video with custom prompt."
-                )]
-
-            report = agent.get_summary_report(results)
-
-            return [TextContent(
-                type="text",
-                text=report
+                text=output
             )]
 
         elif name == "get_youtube_transcript":
@@ -212,7 +183,7 @@ async def call_tool(name: str, arguments: Any) -> Sequence[TextContent]:
             logger.info(f"Extracting transcript for video: {video_url}")
 
             # Extract transcript only
-            transcript = agent.extractor.get_transcript(video_url, language=language)
+            transcript = extractor.get_transcript(video_url, language=language)
 
             if not transcript:
                 return [TextContent(
@@ -221,15 +192,14 @@ async def call_tool(name: str, arguments: Any) -> Sequence[TextContent]:
                 )]
 
             # Format output
-            output = f"""
-YouTube Transcript
-==================
-Video URL: {video_url}
-Language: {language}
-Length: {len(transcript)} characters
+            output = f"""# YouTube 자막
 
-Transcript:
------------
+**영상 URL:** {video_url}
+**언어:** {language}
+**길이:** {len(transcript)} characters
+
+---
+
 {transcript}
 """
 

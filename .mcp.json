@@ -5,10 +5,7 @@
       "args": ["mcp-server/server.py"],
       "env": {
         "GEMINI_API_KEY": "${GEMINI_API_KEY}",
-        "ANTHROPIC_API_KEY": "${ANTHROPIC_API_KEY}",
-        "GEMINI_MODEL": "gemini-1.5-pro",
-        "CLAUDE_MODEL": "claude-sonnet-4-5-20250929",
-        "OUTPUT_DIR": "./output"
+        "GEMINI_MODEL": "gemini-1.5-pro"
       }
     }
   }
