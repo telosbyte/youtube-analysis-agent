@@ -10,7 +10,7 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
+/lib/
 lib64/
 parts/
 sdist/
@@ -42,8 +42,9 @@ logs/
 
 # Output
 output/
-*.json
+/*.json
 !.mcp.json
+!web/**/*.json
 
 # OS
 .DS_Store
